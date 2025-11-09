@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <!DOCTYPE html>
+    <html lang="vi">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Click Star - Game đơn giản</title>
+        <style>
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          html,
+          body {
+            height: 100%;
+            font-family: "Poppins", sans-serif;
+          }
+          body {
+            background: linear-gradient(135deg, #2b2b8a, #0f4c81);
+            color: #fff;
+            overflow: hidden;
+          }
+
+          .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+          }
+
+          h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.4);
+          }
+
+          .hud {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 12px;
+          }
+
+          .info {
+            font-size: 16px;
+            font-weight: 600;
+          }
+
+          .btn {
+            background: #ffd166;
+            color: #222;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+          }
+          .btn:hover {
+            background: #ffcc00;
+            transform: scale(1.05);
+          }
+
+          canvas {
+            background: radial-gradient(circle at center, #0a1a2b, #05101f);
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.5);
+          }
+
+          .footer {
+            margin-top: 12px;
+            font-size: 14px;
+            opacity: 0.85;
+          }
+
+          .scoreboard {
+            margin-top: 10px;
+            font-size: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>⭐ Click Star - Bấm để lấy sao ⭐</h1>
+          <div class="hud">
+            <div class="info">Điểm: <span id="score">0</span></div>
+            <div class="info">Thời gian: <span id="time">30</span>s</div>
+            <button class="btn" id="start">Bắt đầu</button>
+            <button class="btn" id="reset">Làm lại</button>
+          </div>
+          <canvas id="game" width="600" height="420"></canvas>
+          <div class="footer">
+            🎯 Mục tiêu: Bấm vào các ngôi sao rơi để ghi điểm. Càng về sau tốc
+            độ càng nhanh!
+          </div>
+          <div class="scoreboard">🔥 Kỷ lục: <span id="highscore">0</span></div>
+        </div>
+
+        <audio
+          id="clickSound"
+          src="https://cdn.pixabay.com/audio/2021/08/04/audio_702bdb86ae.mp3"
+        ></audio>
+        <audio
+          id="endSound"
+          src="https://cdn.pixabay.com/audio/2022/03/15/audio_1a7c7bb168.mp3"
+        ></audio>
+
+        <script>
+          const canvas = document.getElementById("game");
+          const ctx = canvas.getContext("2d");
+          const scoreEl = document.getElementById("score");
+          const timeEl = document.getElementById("time");
+          const startBtn = document.getElementById("start");
+          const resetBtn = document.getElementById("reset");
+          const highScoreEl = document.getElementById("highscore");
+          const clickSound = document.getElementById("clickSound");
+          const endSound = document.getElementById("endSound");
+
+          let stars = [];
+          let score = 0;
+          let timeLeft = 30;
+          let running = false;
+          let lastTimestamp = 0;
+          let spawnTimer = 0;
+          let spawnInterval = 1000;
+          let highScore = localStorage.getItem("highScore") || 0;
+          highScoreEl.textContent = highScore;
+
+          function rand(min, max) {
+            return Math.random() * (max - min) + min;
+          }
+
+          function createStar() {
+            const r = rand(12, 24);
+            const x = rand(r, canvas.width - r);
+            const y = -r;
+            const speed = rand(60, 160) + Math.min(200, score * 2);
+            stars.push({ x, y, r, speed, rot: 0 });
+          }
+
+          function drawStar(x, y, r, rot) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rot);
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+              ctx.lineTo(
+                Math.cos(((18 + 72 * i) / 180) * Math.PI) * r,
+                -Math.sin(((18 + 72 * i) / 180) * Math.PI) * r
+              );
+              ctx.lineTo(
+                Math.cos(((54 + 72 * i) / 180) * Math.PI) * r * 0.5,
+                -Math.sin(((54 + 72 * i) / 180) * Math.PI) * r * 0.5
+              );
+            }
+            ctx.closePath();
+            ctx.fillStyle = "rgba(255,230,120,0.98)";
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "yellow";
+            ctx.fill();
+            ctx.restore();
+          }
+
+          function update(dt) {
+            if (!running) return;
+            spawnTimer += dt;
+            if (spawnTimer > spawnInterval) {
+              spawnTimer = 0;
+              spawnInterval = Math.max(350, spawnInterval * 0.98);
+              createStar();
+            }
+
+            for (let i = stars.length - 1; i >= 0; i--) {
+              const s = stars[i];
+              s.y += (s.speed * dt) / 1000;
+              s.rot += 0.02 * (s.speed / 100);
+              if (s.y - s.r > canvas.height) stars.splice(i, 1);
+            }
+          }
+
+          function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < 30; i++) {
+              ctx.fillStyle = "rgba(255,255,255,0.03)";
+              ctx.fillRect(
+                (i * 47) % canvas.width,
+                (i * 23) % canvas.height,
+                2,
+                2
+              );
+            }
+
+            for (const s of stars) drawStar(s.x, s.y, s.r, s.rot);
+
+            if (!running) {
+              ctx.fillStyle = "rgba(0,0,0,0.45)";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.fillStyle = "#fff";
+              ctx.font = "20px Poppins";
+              ctx.textAlign = "center";
+              ctx.fillText(
+                'Nhấn "Bắt đầu" để chơi',
+                canvas.width / 2,
+                canvas.height / 2 - 10
+              );
+              ctx.font = "14px Poppins";
+              ctx.fillText(
+                "Bấm vào ngôi sao để ghi điểm!",
+                canvas.width / 2,
+                canvas.height / 2 + 20
+              );
+            }
+          }
+
+          function gameLoop(ts) {
+            if (!lastTimestamp) lastTimestamp = ts;
+            const dt = ts - lastTimestamp;
+            lastTimestamp = ts;
+            update(dt);
+            render();
+            requestAnimationFrame(gameLoop);
+          }
+
+          canvas.addEventListener("click", (e) => {
+            if (!running) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            for (let i = stars.length - 1; i >= 0; i--) {
+              const s = stars[i];
+              const dx = x - s.x;
+              const dy = y - s.y;
+              if (dx * dx + dy * dy <= s.r * s.r) {
+                score += Math.round(1 + s.r / 6);
+                scoreEl.textContent = score;
+                clickSound.currentTime = 0;
+                clickSound.play();
+                stars.splice(i, 1);
+                break;
+              }
+            }
+          });
+
+          function startGame() {
+            score = 0;
+            scoreEl.textContent = score;
+            timeLeft = 30;
+            timeEl.textContent = timeLeft;
+            stars = [];
+            running = true;
+            spawnInterval = 1000;
+            lastTimestamp = 0;
+
+            const timerId = setInterval(() => {
+              if (!running) {
+                clearInterval(timerId);
+                return;
+              }
+              timeLeft -= 1;
+              timeEl.textContent = timeLeft;
+              if (timeLeft <= 0) {
+                running = false;
+                clearInterval(timerId);
+                endSound.play();
+                if (score > highScore) {
+                  highScore = score;
+                  localStorage.setItem("highScore", highScore);
+                  highScoreEl.textContent = highScore;
+                }
+                setTimeout(() => {
+                  alert(
+                    "⏰ Hết giờ!\nĐiểm của bạn: " +
+                      score +
+                      "\nKỷ lục: " +
+                      highScore
+                  );
+                }, 200);
+              }
+            }, 1000);
+          }
+
+          function resetGame() {
+            running = false;
+            stars = [];
+            score = 0;
+            scoreEl.textContent = score;
+            timeLeft = 30;
+            timeEl.textContent = timeLeft;
+            spawnInterval = 1000;
+          }
+
+          startBtn.addEventListener("click", () => {
+            if (!running) startGame();
+          });
+          resetBtn.addEventListener("click", () => resetGame());
+
+          function resizeCanvas() {
+            const ratio = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = 600 * ratio;
+            canvas.height = 420 * ratio;
+            canvas.style.width = "600px";
+            canvas.style.height = "420px";
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+          }
+
+          window.addEventListener("resize", resizeCanvas);
+          resizeCanvas();
+          requestAnimationFrame(gameLoop);
+        </script>
+      </body>
+    </html>
+  </body>
+</html>
